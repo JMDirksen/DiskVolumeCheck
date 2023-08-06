@@ -1,31 +1,6 @@
 # Set workdir
 Split-Path $MyInvocation.MyCommand.Path -Parent | Set-Location
 
-# Load SMTP config
-$configFile = ".\SMTPConfig.ps1"
-if (Test-Path $configFile) { . $configFile }
-else {
-	"Config file SMTPConfig.ps1 not found, please copy and modify SMTPConfig.ps1.template"
-	exit
-}
-
-# Check/generate/test secure SMTP password
-if(-not(Test-Path 'password.txt')) {
-    Read-Host -AsSecureString -Prompt "Enter SMTP password for user $SMTPUser" | ConvertFrom-SecureString | Set-Content 'password.txt'
-    $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString)
-    try {
-        Send-MailMessage -From $EmailFrom -Subject "DiskVolumeCheck test e-mail" -To $EmailTo -Body "This is a test" -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl -ErrorAction Stop
-    }
-    catch {
-        Remove-Item 'password.txt'
-        Write-Host "Sending test e-mail failed!" -ForegroundColor Red
-        throw
-    }
-}
-else {
-    $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString)
-}
-
 # Set variables
 $HealthStatus = "Healthy", "Warning", "Unhealthy"
 
@@ -48,6 +23,31 @@ $volumes | % {
     if($_.HealthStatus) {
         $errors += "Volume $($_.DriveLetter): has status: $($HealthStatus[$_.HealthStatus])`n"
     }
+}
+
+# Load SMTP config
+$configFile = ".\SMTPConfig.ps1"
+if (Test-Path $configFile) { . $configFile }
+else {
+	Write-Host "`nConfig file SMTPConfig.ps1 not found, please copy and modify SMTPConfig.ps1.template for sending failure e-mails" -ForegroundColor Yellow
+	exit
+}
+
+# Check/generate/test secure SMTP password
+if(-not(Test-Path 'password.txt')) {
+    Read-Host -AsSecureString -Prompt "Enter SMTP password for user $SMTPUser" | ConvertFrom-SecureString | Set-Content 'password.txt'
+    $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString)
+    try {
+        Send-MailMessage -From $EmailFrom -Subject "DiskVolumeCheck test e-mail" -To $EmailTo -Body "This is a test" -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl -ErrorAction Stop
+    }
+    catch {
+        Remove-Item 'password.txt'
+        Write-Host "`nSending test e-mail failed! (not storing password)`n" -ForegroundColor Red
+        Write-Host $Error[0].Exception -ForegroundColor Red
+    }
+}
+else {
+    $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString)
 }
 
 # Send mail on errors
