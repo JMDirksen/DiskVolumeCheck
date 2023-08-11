@@ -1,31 +1,28 @@
-# Set workdir
-Split-Path $MyInvocation.MyCommand.Path -Parent | Set-Location
+$Errors = 0
 
-# Set variables
-$HealthStatus = "Healthy", "Warning", "Unhealthy"
+# Check physical disks
+$PDs = Get-PhysicalDisk | Select-Object -Property *, @{Name="Type";Expression={"PhysicalDisk"}}
+$Errors += ($PDs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
-# Read disks
-$disks = Get-WmiObject -Namespace root\Microsoft\Windows\Storage -Class MSFT_Disk | Where-Object {$_.PartitionStyle -and -not $_.IsOffline} | Sort-Object -Property Number
-$disks | Select-Object Number, Model, @{Name="SerialNumber";Expression={$_.SerialNumber.Trim()}}, FirmwareVersion, @{Name="Size (GB)";Expression={[math]::Round($_.Size / 1GB)}}, @{Name="HealthStatus";Expression={$HealthStatus[$_.HealthStatus]}}
+# Check storage pools
+$SPs = Get-StoragePool -IsPrimordial $False | Select-Object -Property *, @{Name="Type";Expression={"StoragePool"}}
+$Errors += ($SPs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
-# Read volumes
-$volumes = Get-WmiObject -Namespace root\Microsoft\Windows\Storage -Class MSFT_Volume | Where-Object {$_.DriveLetter} | Sort-Object -Property DriveLetter
-$volumes | Select-Object DriveLetter, FileSystemLabel, FileSystem, @{Name="Size (GB)";Expression={[math]::Round($_.Size / 1GB)}}, @{Name="HealthStatus";Expression={$HealthStatus[$_.HealthStatus]}}
+# Check virtual disks
+$VDs = Get-VirtualDisk | Select-Object -Property *, @{Name="Type";Expression={"VirtualDisk"}}
+$Errors += ($VDs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
-# Check for errors (HealthStatus not zero)
-$errors = ""
-$disks | % {
-    if($_.HealthStatus) {
-        $errors += "Disk $($_.Number) has status: $($HealthStatus[$_.HealthStatus])`n"
-    }
-}
-$volumes | % {
-    if($_.HealthStatus) {
-        $errors += "Volume $($_.DriveLetter): has status: $($HealthStatus[$_.HealthStatus])`n"
-    }
-}
+# Check volumes
+$Vs = Get-Volume | Where-Object { $_.FileSystemLabel -or $_.DriveLetter } | Select-Object -Property *, @{Name="Type";Expression={"Volume"}}, @{Name="FriendlyName";Expression={$_.FileSystemLabel+" ("+$_.DriveLetter+":)"}}
+$Errors += ($Vs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
+
+# Generate/show output
+$output = $PDs + $SPs + $VDs + $Vs
+$outputHTML = $output | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
+$output | ft -Property Type, FriendlyName, HealthStatus, OperationalStatus
 
 # Load SMTP config
+Split-Path $MyInvocation.MyCommand.Path -Parent | Set-Location   # Set workdir
 $configFile = ".\SMTPConfig.ps1"
 if (Test-Path $configFile) { . $configFile }
 else {
@@ -51,6 +48,8 @@ else {
 }
 
 # Send mail on errors
-if($errors) {
-    Send-MailMessage -From $EmailFrom -Subject "DiskVolumeCheck failure" -To $EmailTo -Body $errors -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl
+if($Errors) {
+    $subject = "DiskVolumeCheck $Errors error"
+    if($Errors -gt 1) { $subject += "s" }
+    Send-MailMessage -From $EmailFrom -Subject $subject -To $EmailTo -Body $outputHTML -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl -BodyAsHtml
 }
