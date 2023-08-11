@@ -1,25 +1,24 @@
-$Errors = 0
+$errors = 0
 
 # Check physical disks
 $PDs = Get-PhysicalDisk | Select-Object -Property *, @{Name="Type";Expression={"PhysicalDisk"}}
-$Errors += ($PDs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
 # Check storage pools
 $SPs = Get-StoragePool -IsPrimordial $False | Select-Object -Property *, @{Name="Type";Expression={"StoragePool"}}
-$Errors += ($SPs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
 # Check virtual disks
 $VDs = Get-VirtualDisk | Select-Object -Property *, @{Name="Type";Expression={"VirtualDisk"}}
-$Errors += ($VDs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
 
 # Check volumes
 $Vs = Get-Volume | Where-Object { $_.FileSystemLabel -or $_.DriveLetter } | Select-Object -Property *, @{Name="Type";Expression={"Volume"}}, @{Name="FriendlyName";Expression={$_.FileSystemLabel+" ("+$_.DriveLetter+":)"}}
-$Errors += ($Vs | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" } | measure).Count
+
+# Check for errors
+$combined = $PDs + $SPs + $VDs + $Vs
+$errors = ($combined | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" }).Length
 
 # Generate/show output
-$output = $PDs + $SPs + $VDs + $Vs
-$outputHTML = $output | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
-$output | ft -Property Type, FriendlyName, HealthStatus, OperationalStatus
+$html = $combined | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
+$combined | ft -Property Type, FriendlyName, HealthStatus, OperationalStatus
 
 # Load SMTP config
 Split-Path $MyInvocation.MyCommand.Path -Parent | Set-Location   # Set workdir
@@ -48,8 +47,8 @@ else {
 }
 
 # Send mail on errors
-if($Errors) {
-    $subject = "DiskVolumeCheck $Errors error"
-    if($Errors -gt 1) { $subject += "s" }
-    Send-MailMessage -From $EmailFrom -Subject $subject -To $EmailTo -Body $outputHTML -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl -BodyAsHtml
+if($errors) {
+    $subject = "DiskVolumeCheck $errors error"
+    if($errors -gt 1) { $subject += "s" }
+    Send-MailMessage -From $EmailFrom -Subject $subject -To $EmailTo -Body $html -Credential $SMTPCredentials -Port $SMTPPort -SmtpServer $SMTPServer -UseSsl -BodyAsHtml
 }
