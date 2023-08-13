@@ -1,32 +1,32 @@
+$checks = @()
 $errors = 0
 
 # Check physical disks
-$PDs = Get-PhysicalDisk | Select-Object -Property *, @{Name="Type";Expression={"PhysicalDisk"}}
+$checks += Get-PhysicalDisk | Select-Object -Property *, @{Name="Type";Expression={"PhysicalDisk"}}
 
 # Check storage pools
-$SPs = Get-StoragePool -IsPrimordial $False | Select-Object -Property *, @{Name="Type";Expression={"StoragePool"}}
+$checks += Get-StoragePool -IsPrimordial $False -ErrorAction SilentlyContinue | Select-Object -Property *, @{Name="Type";Expression={"StoragePool"}}
 
 # Check virtual disks
-$VDs = Get-VirtualDisk | Select-Object -Property *, @{Name="Type";Expression={"VirtualDisk"}}
+$checks += Get-VirtualDisk | Select-Object -Property *, @{Name="Type";Expression={"VirtualDisk"}}
 
 # Check volumes
-$Vs = Get-Volume | Where-Object { $_.FileSystemLabel -or $_.DriveLetter } | Select-Object -Property *, @{Name="Type";Expression={"Volume"}}, @{Name="FriendlyName";Expression={$_.FileSystemLabel+" ("+$_.DriveLetter+":)"}}
+$checks += Get-Volume | Where-Object { $_.FileSystemLabel -or $_.DriveLetter } | Select-Object -Property *, @{Name="Type";Expression={"Volume"}}, @{Name="FriendlyName";Expression={$_.FileSystemLabel+" ("+$_.DriveLetter+":)"}}
 
 # Check for errors
-$combined = $PDs + $SPs + $VDs + $Vs
-$errors = ($combined | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" }).Length
+$errors = ($checks | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.OperationalStatus -ne "OK" }).Length
 
 # Generate/show output
-$html = $combined | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
-$combined | ft -Property Type, FriendlyName, HealthStatus, OperationalStatus
+$html = $checks | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
+$checks | ft -Property Type, FriendlyName, HealthStatus, OperationalStatus
 
 # Load SMTP config
 Split-Path $MyInvocation.MyCommand.Path -Parent | Set-Location   # Set workdir
 $configFile = ".\SMTPConfig.ps1"
 if (Test-Path $configFile) { . $configFile }
 else {
-	Write-Host "`nConfig file SMTPConfig.ps1 not found, please copy and modify SMTPConfig.ps1.template for sending failure e-mails" -ForegroundColor Yellow
-	exit
+	Write-Host "Config file SMTPConfig.ps1 not found, please copy and modify SMTPConfig.ps1.template for sending failure e-mails" -ForegroundColor Yellow
+	Exit
 }
 
 # Check/generate/test secure SMTP password
@@ -38,12 +38,20 @@ if(-not(Test-Path 'password.txt')) {
     }
     catch {
         Remove-Item 'password.txt'
-        Write-Host "`nSending test e-mail failed! (not storing password)`n" -ForegroundColor Red
-        Write-Host $Error[0].Exception -ForegroundColor Red
+        Write-Host "Sending test e-mail failed! (not storing password)" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        Exit
     }
 }
 else {
-    $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString)
+    try {
+        $SMTPCredentials = New-Object System.Management.Automation.PSCredential -ArgumentList $SMTPUser, $(Get-Content 'password.txt' | ConvertTo-SecureString -ErrorAction Stop)
+    }
+    catch [System.Security.Cryptography.CryptographicException] {
+        Write-Host "Password (SecureString) stored in password.txt is invalid" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        Exit
+    }
 }
 
 # Send mail on errors
