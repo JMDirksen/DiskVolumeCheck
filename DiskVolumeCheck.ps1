@@ -34,7 +34,9 @@ else {
 $credFile = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "credentials.xml"
 if(Test-Path $credFile) { $SMTPCredentials = Import-Clixml $credFile }
 else {
-    $SMTPCredentials = Get-Credential -Message "Enter credentials for $($SendMailmessageParams.SMTPServer)"
+    $user = Read-Host "Username for $($SendMailmessageParams.SMTPServer)"
+    $pass = Read-Host "Password" -AsSecureString
+    $SMTPCredentials = New-Object System.Management.Automation.PSCredential ($user, $pass)
     try {
         $subject = "DiskVolumeCheck test e-mail"
         Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials -ErrorAction Stop
