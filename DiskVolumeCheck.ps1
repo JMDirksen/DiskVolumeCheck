@@ -38,7 +38,7 @@ else {
     $pass = Read-Host "Password" -AsSecureString
     $SMTPCredentials = New-Object System.Management.Automation.PSCredential ($user, $pass)
     try {
-        $subject = "DiskVolumeCheck test e-mail"
+        $subject = "[$env:COMPUTERNAME] DiskVolumeCheck test e-mail"
         Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials -ErrorAction Stop
         Write-Host "Test e-mail sent" -ForegroundColor Green
     }
@@ -52,7 +52,7 @@ else {
 
 # Send mail on errors
 if($errors) {
-    $subject = "DiskVolumeCheck $errors error"
+    $subject = "[$env:COMPUTERNAME] DiskVolumeCheck $errors error"
     if($errors -gt 1) { $subject += "s" }
     Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials
 }
