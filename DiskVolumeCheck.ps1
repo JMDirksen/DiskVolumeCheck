@@ -30,11 +30,11 @@ else {
 	Exit
 }
 
-# Check/generate/test SMTP credentials
+# Load/request SMTP credentials
 $credFile = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "credentials.xml"
 if(Test-Path $credFile) { $SMTPCredentials = Import-Clixml $credFile }
 else {
-    $SMTPCredentials = Get-Credential -Message "Enter SMTP credentials"
+    $SMTPCredentials = Get-Credential -Message "Enter credentials for $($SendMailmessageParams.SMTPServer)"
     try {
         $subject = "DiskVolumeCheck test e-mail"
         Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials -ErrorAction Stop
