@@ -27,7 +27,7 @@ if (Test-Path $configFile) { . $configFile }
 else {
 	Write-Host "Config file SMTPConfig.ps1 not found" -ForegroundColor Yellow
     Write-Host "Please copy, rename and modify SMTPConfig.template.ps1 for sending failure e-mails" -ForegroundColor Yellow
-	Exit
+	Exit 1
 }
 
 # Load/request SMTP credentials
@@ -40,11 +40,12 @@ else {
     try {
         $subject = "DiskVolumeCheck test e-mail"
         Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials -ErrorAction Stop
+        Write-Host "Test e-mail sent" -ForegroundColor Green
     }
     catch {
         Write-Host "Sending test e-mail failed!" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
-        Exit
+        Exit 2
     }
     $SMTPCredentials | Export-Clixml $credFile
 }
