@@ -1,3 +1,5 @@
+param([switch] $SendEmail)
+
 $checks = @()
 $errors = 0
 
@@ -20,6 +22,10 @@ $errors = ($checks | Where-Object { $_.HealthStatus -ne "Healthy" -or $_.Operati
 # Generate/show output
 $html = $checks | ConvertTo-Html -Property Type, FriendlyName, HealthStatus, OperationalStatus | Out-String
 $checks | Format-Table -Property Type, FriendlyName, HealthStatus, OperationalStatus
+$msg = "$errors error"
+if(-not ($errors -eq 1)) { $msg += "s" }
+if($errors -gt 0) { $color = @{ForegroundColor = "Red"} } else { $color = @{ForegroundColor = "Green"} }
+Write-Host $msg @color
 
 # Load SMTP config
 $configFile = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "SMTPConfig.ps1"
@@ -50,9 +56,9 @@ else {
     $SMTPCredentials | Export-Clixml $credFile
 }
 
-# Send mail on errors
-if($errors) {
+# Send mail on errors or when -SendEmail parameter is passed
+if($errors -or $SendEmail) {
     $subject = "[$env:COMPUTERNAME] DiskVolumeCheck $errors error"
-    if($errors -gt 1) { $subject += "s" }
+    if(-not ($errors -eq 1)) { $subject += "s" }
     Send-MailMessage -Subject $subject -Body $html -BodyAsHtml @SendMailMessageParams -Credential $SMTPCredentials
 }
