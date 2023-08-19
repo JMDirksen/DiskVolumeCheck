@@ -7,6 +7,7 @@ echo Creating monthly task with the -SendEmail parameter...
 schtasks /create /tn "DiskVolumeCheck-SendEmail" /tr "powershell.exe -f %~dp0DiskVolumeCheck.ps1 -SendEmail" /sc monthly /mo 1 /st 00:00
 powershell.exe -f DiskVolumeCheck.ps1
 echo.
-echo If all runs well you should be able to change the task 'DiskVolumeCheck[-SendEmail]' to 'Run whether user is logged on or not' with 'Do not store password...' on to make it run in the background.
+echo If all runs well you should be able to change the task 'DiskVolumeCheck' to 'Run whether user is logged on or not' with 'Do not store password...' on to make it run in the background.
+echo In the task 'DiskVolumeCheck-SendEmail' you should check the 'Run task as soon as possible...' box.
 echo.
 pause
